@@ -38,8 +38,6 @@ The package-level functions use the 100 km network (`marnet100`). `marnet50` and
 
 `OriginSnapKm` and `DestinationSnapKm` are always in kilometres, whatever `Units` is. A zero option value means unset: for example, `SimilarityThreshold: 0` becomes 0.02.
 
-searoute-data is not yet published. Until it is, builds need it published or replaced locally with a `replace` directive in `go.mod`.
-
 ## Ports and ECA zones
 
 `ports.Resolve("CNSHA")` turns a UN/LOCODE into a `Point`. Import `github.com/openfreightroutes/searoute-go/eca` (for its side effect) to register the emission control areas used for ECA distance.
