@@ -11,24 +11,23 @@ import (
 	"testing"
 
 	"github.com/openfreightroutes/searoute-data/golden"
+	"github.com/openfreightroutes/searoute-data/marnet100"
 	"github.com/openfreightroutes/searoute-data/marnet20"
 	"github.com/openfreightroutes/searoute-data/marnet50"
 	"github.com/openfreightroutes/searoute-data/network"
 
 	searoute "github.com/openfreightroutes/searoute-go"
+	"github.com/openfreightroutes/searoute-go/ports"
 )
 
 var knownOptions = []string{"units", "restrictions", "via", "allowArctic", "vesselDraftMeters", "speedKnots", "appendOriginDestination", "returnPassages", "maxSnapDistanceKm", "antimeridian", "emissions", "vesselClass", "co2eFactorKgPerKm", "glecInflation", "similarityThreshold", "k"}
 
 func TestGolden(t *testing.T) {
 	pending := map[string]string{
-		"multi":        "SeaRouteMulti lands in Task 7",
-		"alternatives": "SeaRouteAlternatives lands in Task 7",
-		"errors":       "via and ports land in Tasks 5 and 7",
-		"emissions":    "emissions land in Task 8",
-		"networks":     "custom networks land in Task 9",
+		"emissions": "emissions land in Task 8",
+		"networks":  "custom networks land in Task 9",
 	}
-	networks := map[string]func() *network.Network{"marnet50": marnet50.Network, "marnet20": marnet20.Network}
+	networks := map[string]func() *network.Network{"marnet100": marnet100.Network, "marnet50": marnet50.Network, "marnet20": marnet20.Network}
 	routers := map[string]*searoute.Router{}
 
 	for _, file := range []string{"basic", "options", "antimeridian", "multi", "alternatives", "emissions", "errors", "networks"} {
@@ -61,11 +60,18 @@ func TestGolden(t *testing.T) {
 			for _, c := range cases {
 				t.Run(strings.TrimPrefix(c.Name, file+"/"), func(t *testing.T) {
 					var points []searoute.Point
+					var unresolved error
 					for _, p := range c.Points {
-						ll, ok := p.([]any)
-						if !ok {
-							t.Skip("port codes need ports.Resolve (Task 7)")
+						if code, ok := p.(string); ok {
+							pt, err := ports.Resolve(code)
+							if err != nil {
+								unresolved = err
+								break
+							}
+							points = append(points, pt)
+							continue
 						}
+						ll := p.([]any)
 						points = append(points, searoute.Point{Lon: ll[0].(float64), Lat: ll[1].(float64)})
 					}
 					if c.ECA {
@@ -87,7 +93,7 @@ func TestGolden(t *testing.T) {
 					}
 
 					router := routers[c.Network]
-					if router == nil && c.Network != "marnet100" {
+					if router == nil {
 						router, err = searoute.NewRouter(networks[c.Network]())
 						if err != nil {
 							t.Fatal(err)
@@ -95,20 +101,31 @@ func TestGolden(t *testing.T) {
 						routers[c.Network] = router
 					}
 					var got any
-					var gotErr error
-					switch c.Fn {
-					case "seaRoute":
-						if router == nil {
-							got, gotErr = searoute.SeaRoute(points[0], points[1], opts)
-						} else {
+					gotErr := unresolved
+					if gotErr == nil {
+						switch c.Fn {
+						case "seaRoute":
 							got, gotErr = router.SeaRoute(points[0], points[1], opts)
+						case "seaRouteMulti":
+							got, gotErr = router.SeaRouteMulti(points, opts)
+						case "seaRouteAlternatives":
+							k := 3
+							var kOpt struct{ K *int }
+							if err := json.Unmarshal(c.Options, &kOpt); err != nil {
+								t.Fatal(err)
+							}
+							if kOpt.K != nil {
+								k = *kOpt.K
+							}
+							got, gotErr = router.SeaRouteAlternatives(points[0], points[1], k, opts)
+						default:
+							t.Skipf("unknown fn %s", c.Fn)
 						}
-					default:
-						t.Skipf("%s is not implemented yet", c.Fn)
 					}
 
 					if c.Error != nil {
 						var snapErr *searoute.SnapFailedError
+						var portErr *ports.UnknownPortError
 						switch c.Error.Name {
 						case "SnapFailedError":
 							if !errors.As(gotErr, &snapErr) || snapErr.Side != c.Error.Side {
@@ -117,6 +134,10 @@ func TestGolden(t *testing.T) {
 						case "NoRouteError":
 							if !errors.Is(gotErr, searoute.ErrNoRoute) {
 								t.Fatalf("want ErrNoRoute, got %v", gotErr)
+							}
+						case "UnknownPortError":
+							if !errors.As(gotErr, &portErr) {
+								t.Fatalf("want UnknownPortError, got %v", gotErr)
 							}
 						default:
 							if gotErr == nil {

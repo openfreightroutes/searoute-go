@@ -147,3 +147,24 @@ func TestViaContradiction(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestMultiTooFew(t *testing.T) {
+	if _, err := SeaRouteMulti([]Point{{121.5, 31.0}}, Options{}); err == nil {
+		t.Fatal("want error")
+	}
+}
+
+func TestAlternativesK(t *testing.T) {
+	routes, err := SeaRouteAlternatives(Point{121.5, 31.0}, Point{4.4, 51.9}, 3, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(routes) == 0 || len(routes) > 3 || routes[0].Variant != "baseline" {
+		t.Fatalf("got %d routes", len(routes))
+	}
+	for i := 1; i < len(routes); i++ {
+		if routes[i].Length < routes[i-1].Length {
+			t.Fatalf("lengths not ascending at %d", i)
+		}
+	}
+}

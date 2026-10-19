@@ -1,6 +1,7 @@
 package searoute
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"math"
@@ -94,7 +95,6 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 		legOpts.Restrictions = nil
 		legOpts.AllowArctic = true
 		legOpts.VesselDraftMeters = 0
-		legOpts.Antimeridian = ""
 		for _, name := range names {
 			canonical := name
 			if alias, ok := table.Aliases[name]; ok {
@@ -117,62 +117,17 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 		}
 		waypoints = append(waypoints, destination)
 
-		var legs []*Route
-		for i := 0; i < len(waypoints)-1; i++ {
-			leg, err := r.SeaRoute(waypoints[i], waypoints[i+1], legOpts)
-			if err != nil {
-				return nil, err
-			}
-			legs = append(legs, leg)
-		}
-
-		first, last := legs[0], legs[len(legs)-1]
-		route := &Route{
-			Coordinates:       slices.Clone(first.Coordinates),
-			Units:             units,
-			BBox:              [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)},
-			OriginSnapKm:      first.OriginSnapKm,
-			DestinationSnapKm: last.DestinationSnapKm,
-		}
-		for i, leg := range legs {
-			route.Length += leg.Length
-			if i == 0 {
-				continue
-			}
-			next := leg.Coordinates
-			if route.Coordinates[len(route.Coordinates)-1] == next[0] {
-				next = next[1:]
-			}
-			route.Coordinates = append(route.Coordinates, next...)
-		}
-		for _, c := range route.Coordinates {
-			route.BBox[0] = min(route.BBox[0], c[0])
-			route.BBox[1] = min(route.BBox[1], c[1])
-			route.BBox[2] = max(route.BBox[2], c[0])
-			route.BBox[3] = max(route.BBox[3], c[1])
+		legOpts.Antimeridian = opts.Antimeridian
+		route, err := r.SeaRouteMulti(waypoints, legOpts)
+		if err != nil {
+			return nil, err
 		}
 		gcKm := haversineKm([2]float64{origin.Lon, origin.Lat}, [2]float64{destination.Lon, destination.Lat})
-		totalKm := route.Length * unitToKm(units)
 		route.GreatCircleLength = gcKm / unitToKm(units)
 		route.DetourRatio = 1
 		if gcKm > 0 {
-			route.DetourRatio = totalKm / gcKm
+			route.DetourRatio = route.Length * unitToKm(units) / gcKm
 		}
-		if opts.SpeedKnots > 0 {
-			hours := totalKm / (opts.SpeedKnots * 1.852)
-			route.DurationHours = &hours
-		}
-		if opts.ReturnPassages {
-			route.Passages = []string{}
-			for _, leg := range legs {
-				for _, name := range leg.Passages {
-					if !slices.Contains(route.Passages, name) {
-						route.Passages = append(route.Passages, name)
-					}
-				}
-			}
-		}
-		route.applyAntimeridian(opts.Antimeridian)
 		return route, nil
 	}
 
@@ -281,4 +236,145 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 	}
 	route.applyAntimeridian(opts.Antimeridian)
 	return route, nil
+}
+
+func (r *Router) SeaRouteMulti(points []Point, opts Options) (*Route, error) {
+	if len(points) < 2 {
+		return nil, errors.New("SeaRouteMulti requires at least two waypoints")
+	}
+	if opts.Antimeridian != "" && opts.Antimeridian != "unwrap" && opts.Antimeridian != "split" {
+		return nil, fmt.Errorf("invalid antimeridian option %q: want \"unwrap\" or \"split\"", opts.Antimeridian)
+	}
+	units := opts.Units
+	if units == "" {
+		units = NauticalMiles
+	}
+
+	legOpts := opts
+	legOpts.Antimeridian = ""
+	var legs []*Route
+	for i := 0; i < len(points)-1; i++ {
+		leg, err := r.SeaRoute(points[i], points[i+1], legOpts)
+		if err != nil {
+			return nil, err
+		}
+		legs = append(legs, leg)
+	}
+
+	route := &Route{
+		Coordinates:       slices.Clone(legs[0].Coordinates),
+		Units:             units,
+		BBox:              [4]float64{math.Inf(1), math.Inf(1), math.Inf(-1), math.Inf(-1)},
+		OriginSnapKm:      legs[0].OriginSnapKm,
+		DestinationSnapKm: legs[len(legs)-1].DestinationSnapKm,
+	}
+	totalKm := 0.0
+	for i, leg := range legs {
+		route.Length += leg.Length
+		totalKm += leg.Length * unitToKm(leg.Units)
+		if i == 0 {
+			continue
+		}
+		next := leg.Coordinates
+		if route.Coordinates[len(route.Coordinates)-1] == next[0] {
+			next = next[1:]
+		}
+		route.Coordinates = append(route.Coordinates, next...)
+	}
+	for _, c := range route.Coordinates {
+		route.BBox[0] = min(route.BBox[0], c[0])
+		route.BBox[1] = min(route.BBox[1], c[1])
+		route.BBox[2] = max(route.BBox[2], c[0])
+		route.BBox[3] = max(route.BBox[3], c[1])
+	}
+	gcKm := 0.0
+	for i := 0; i < len(points)-1; i++ {
+		gcKm += haversineKm([2]float64{points[i].Lon, points[i].Lat}, [2]float64{points[i+1].Lon, points[i+1].Lat})
+	}
+	route.GreatCircleLength = gcKm / unitToKm(units)
+	route.DetourRatio = 1
+	if gcKm > 0 {
+		route.DetourRatio = totalKm / gcKm
+	}
+	if opts.SpeedKnots > 0 {
+		hours := totalKm / (opts.SpeedKnots * 1.852)
+		route.DurationHours = &hours
+	}
+	if opts.ReturnPassages {
+		route.Passages = []string{}
+		for _, leg := range legs {
+			for _, name := range leg.Passages {
+				if !slices.Contains(route.Passages, name) {
+					route.Passages = append(route.Passages, name)
+				}
+			}
+		}
+	}
+	// Task 8: emissions (ecaKm, ecaFraction, co2eTonnes) are computed here from route.Coordinates and totalKm.
+	route.applyAntimeridian(opts.Antimeridian)
+	return route, nil
+}
+
+var alternativeVariants = []struct {
+	label  string
+	extras []string
+}{
+	{"baseline", nil},
+	{"no-suez", []string{"suez", "babelmandeb"}},
+	{"no-panama", []string{"panama"}},
+	{"no-suez-no-panama", []string{"suez", "babelmandeb", "panama"}},
+	{"no-malacca", []string{"malacca"}},
+	{"no-gibraltar", []string{"gibraltar"}},
+}
+
+func (r *Router) SeaRouteAlternatives(origin, destination Point, k int, opts Options) ([]*Route, error) {
+	k = max(k, 1)
+	threshold := opts.SimilarityThreshold
+	if threshold == 0 {
+		threshold = 0.02
+	}
+
+	type candidate struct {
+		route *Route
+		km    float64
+	}
+	var candidates []candidate
+	for _, v := range alternativeVariants {
+		variantOpts := opts
+		variantOpts.Antimeridian = ""
+		variantOpts.ReturnPassages = true
+		variantOpts.Restrictions = slices.Concat(opts.Restrictions, v.extras)
+		route, err := r.SeaRoute(origin, destination, variantOpts)
+		if err != nil {
+			continue
+		}
+		route.Variant = v.label
+		candidates = append(candidates, candidate{route, route.Length * unitToKm(route.Units)})
+	}
+	slices.SortStableFunc(candidates, func(a, b candidate) int { return cmp.Compare(a.km, b.km) })
+
+	var accepted []candidate
+	for _, c := range candidates {
+		duplicate := false
+		for _, a := range accepted {
+			if math.Abs(a.km-c.km)/max(a.km, 1) < threshold {
+				duplicate = true
+				break
+			}
+		}
+		if !duplicate {
+			accepted = append(accepted, c)
+		}
+		if len(accepted) >= k {
+			break
+		}
+	}
+	if len(accepted) == 0 {
+		return nil, ErrNoRoute
+	}
+	routes := make([]*Route, len(accepted))
+	for i, c := range accepted {
+		routes[i] = c.route
+	}
+	return routes, nil
 }
