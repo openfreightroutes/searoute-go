@@ -49,6 +49,9 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 	if units == "" {
 		units = NauticalMiles
 	}
+	if opts.Antimeridian != "" && opts.Antimeridian != "unwrap" && opts.Antimeridian != "split" {
+		return nil, fmt.Errorf("invalid antimeridian option %q: want \"unwrap\" or \"split\"", opts.Antimeridian)
+	}
 	table := passages.Load()
 	for _, name := range slices.Concat(opts.Restrictions, opts.Via) {
 		if _, ok := table.BBoxes[name]; !ok {
@@ -169,6 +172,7 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 				}
 			}
 		}
+		route.applyAntimeridian(opts.Antimeridian)
 		return route, nil
 	}
 
@@ -275,5 +279,6 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 	if opts.AppendOriginDestination {
 		route.Coordinates = slices.Concat([][2]float64{o}, path, [][2]float64{d})
 	}
+	route.applyAntimeridian(opts.Antimeridian)
 	return route, nil
 }

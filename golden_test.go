@@ -22,7 +22,6 @@ var knownOptions = []string{"units", "restrictions", "via", "allowArctic", "vess
 
 func TestGolden(t *testing.T) {
 	pending := map[string]string{
-		"antimeridian": "antimeridian modes land in Task 6",
 		"multi":        "SeaRouteMulti lands in Task 7",
 		"alternatives": "SeaRouteAlternatives lands in Task 7",
 		"errors":       "via and ports land in Tasks 5 and 7",
@@ -85,9 +84,6 @@ func TestGolden(t *testing.T) {
 						if !slices.Contains(knownOptions, k) {
 							t.Fatalf("unknown option %q", k)
 						}
-					}
-					if opts.Antimeridian != "" {
-						t.Skip("Task 6")
 					}
 
 					router := routers[c.Network]
