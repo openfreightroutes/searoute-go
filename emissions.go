@@ -3,6 +3,7 @@ package searoute
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sync"
 )
 
@@ -19,7 +20,7 @@ var (
 func RegisterECAZones(zones []ECAZone) {
 	ecaMu.Lock()
 	defer ecaMu.Unlock()
-	ecaZones = zones
+	ecaZones = slices.Clone(zones)
 }
 
 var vesselClasses = map[string]struct{ fuelTonnesPerDay, serviceSpeedKnots float64 }{

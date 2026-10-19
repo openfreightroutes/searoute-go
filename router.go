@@ -254,6 +254,7 @@ func (r *Router) SeaRouteMulti(points []Point, opts Options) (*Route, error) {
 
 	legOpts := opts
 	legOpts.Antimeridian = ""
+	legOpts.Emissions = false
 	var legs []*Route
 	for i := 0; i < len(points)-1; i++ {
 		leg, err := r.SeaRoute(points[i], points[i+1], legOpts)

@@ -32,3 +32,10 @@ func TestNoZonesNoECA(t *testing.T) {
 		t.Fatalf("got %v %v", r.ECAKm, r.ECAFraction)
 	}
 }
+
+func TestMultiUnknownVesselClass(t *testing.T) {
+	_, err := SeaRouteMulti([]Point{{-74, 40.5}, {4.4, 51.9}, {121.5, 31}}, Options{Emissions: true, VesselClass: "dinghy"})
+	if err == nil {
+		t.Fatal("want error")
+	}
+}
