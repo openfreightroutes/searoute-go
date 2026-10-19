@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"reflect"
+	"slices"
 	"sync"
 	"testing"
 
@@ -13,9 +14,12 @@ import (
 )
 
 func TestShanghaiRotterdam(t *testing.T) {
-	r, err := SeaRoute(Point{121.5, 31.0}, Point{4.4, 51.9}, Options{Units: Kilometers})
+	r, err := SeaRoute(Point{121.5, 31.0}, Point{4.4, 51.9}, Options{Units: Kilometers, ReturnPassages: true})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if !slices.Equal(r.Passages, []string{"malacca", "babelmandeb", "suez", "gibraltar", "dover"}) {
+		t.Fatalf("passages %v", r.Passages)
 	}
 	if math.Abs(r.Length-19752.85044899524) > 19752.85044899524*1e-3 {
 		t.Fatalf("length %v", r.Length)
@@ -103,5 +107,43 @@ func TestSegmentIntersectsBBox(t *testing.T) {
 	}
 	if !segmentIntersectsBBox([2]float64{32.5, 30}, [2]float64{32.5, 30}, suez) {
 		t.Fatal("point inside the box not detected")
+	}
+}
+
+func TestUnknownPassage(t *testing.T) {
+	for _, o := range []Options{{Restrictions: []string{"atlantis"}}, {Via: []string{"atlantis"}}} {
+		if _, err := SeaRoute(Point{121.5, 31.0}, Point{4.4, 51.9}, o); !errors.Is(err, ErrUnknownPassage) {
+			t.Fatalf("%+v: err = %v", o, err)
+		}
+	}
+}
+
+func TestBlockedSnapVertex(t *testing.T) {
+	r, err := SeaRoute(Point{32.55, 30.5}, Point{4.4, 51.9}, Options{Restrictions: []string{"suez"}, ReturnPassages: true})
+	if err != nil {
+		if !errors.Is(err, ErrNoRoute) {
+			t.Fatal(err)
+		}
+		return
+	}
+	if slices.Contains(r.Passages, "suez") {
+		t.Fatalf("passages %v", r.Passages)
+	}
+}
+
+func TestDraftBlocksPanama(t *testing.T) {
+	r, err := SeaRoute(Point{-74.0, 40.5}, Point{-118.3, 33.7}, Options{VesselDraftMeters: 15.3, ReturnPassages: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Contains(r.Passages, "panama") {
+		t.Fatalf("passages %v", r.Passages)
+	}
+}
+
+func TestViaContradiction(t *testing.T) {
+	_, err := SeaRoute(Point{121.5, 31.0}, Point{4.4, 51.9}, Options{Via: []string{"suez"}, Restrictions: []string{"suez"}})
+	if !errors.Is(err, ErrNoRoute) {
+		t.Fatalf("err = %v", err)
 	}
 }

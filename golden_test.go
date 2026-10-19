@@ -18,9 +18,10 @@ import (
 	searoute "github.com/openfreightroutes/searoute-go"
 )
 
+var knownOptions = []string{"units", "restrictions", "via", "allowArctic", "vesselDraftMeters", "speedKnots", "appendOriginDestination", "returnPassages", "maxSnapDistanceKm", "antimeridian", "emissions", "vesselClass", "co2eFactorKgPerKm", "glecInflation", "similarityThreshold", "k"}
+
 func TestGolden(t *testing.T) {
 	pending := map[string]string{
-		"options":      "restrictions, via, draft and passages land in Task 5",
 		"antimeridian": "antimeridian modes land in Task 6",
 		"multi":        "SeaRouteMulti lands in Task 7",
 		"alternatives": "SeaRouteAlternatives lands in Task 7",
@@ -76,8 +77,17 @@ func TestGolden(t *testing.T) {
 					if err := json.Unmarshal(c.Options, &opts); err != nil {
 						t.Fatal(err)
 					}
-					if opts.ReturnPassages {
-						t.Skip("passage reporting lands in Task 5")
+					var rawOpts map[string]json.RawMessage
+					if err := json.Unmarshal(c.Options, &rawOpts); err != nil {
+						t.Fatal(err)
+					}
+					for k := range rawOpts {
+						if !slices.Contains(knownOptions, k) {
+							t.Fatalf("unknown option %q", k)
+						}
+					}
+					if opts.Antimeridian != "" {
+						t.Skip("Task 6")
 					}
 
 					router := routers[c.Network]
