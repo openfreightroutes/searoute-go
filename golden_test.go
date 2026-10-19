@@ -24,17 +24,11 @@ import (
 var knownOptions = []string{"units", "restrictions", "via", "allowArctic", "vesselDraftMeters", "speedKnots", "appendOriginDestination", "returnPassages", "maxSnapDistanceKm", "antimeridian", "emissions", "vesselClass", "co2eFactorKgPerKm", "glecInflation", "similarityThreshold", "k"}
 
 func TestGolden(t *testing.T) {
-	pending := map[string]string{
-		"networks": "custom networks land in Task 9",
-	}
 	networks := map[string]func() *network.Network{"marnet100": marnet100.Network, "marnet50": marnet50.Network, "marnet20": marnet20.Network}
 	routers := map[string]*searoute.Router{}
 
 	for _, file := range []string{"basic", "options", "antimeridian", "multi", "alternatives", "emissions", "errors", "networks"} {
 		t.Run(file, func(t *testing.T) {
-			if reason, ok := pending[file]; ok {
-				t.Skip(reason)
-			}
 			f, err := golden.FS.Open(file + ".json.gz")
 			if err != nil {
 				t.Fatal(err)
