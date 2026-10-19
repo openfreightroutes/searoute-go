@@ -50,7 +50,15 @@ func buildGraph(n *network.Network, weight func(a, b [2]float64, pass string) fl
 	keys := make([][][2]float64, len(n.Features))
 	for i, f := range n.Features {
 		for _, c := range f.Coords {
-			k := [2]float64{math.Round(c[0]/1e-5) * 1e-5, math.Round(c[1]/1e-5) * 1e-5}
+			var k [2]float64
+			for ax, x := range c {
+				// JavaScript Math.round rounds halves toward +Inf; math.Round rounds them away from zero.
+				r := math.Round(x / 1e-5)
+				if x/1e-5-r == 0.5 {
+					r++
+				}
+				k[ax] = r * 1e-5
+			}
 			keys[i] = append(keys[i], k)
 			g.sourceCoords[k] = c
 		}
@@ -117,9 +125,18 @@ func buildGraph(n *network.Network, weight func(a, b [2]float64, pass string) fl
 	return g
 }
 
-func (g *graph) findPath(a, b [2]float64) ([][2]float64, bool) {
-	start := [2]float64{math.Round(a[0]/1e-5) * 1e-5, math.Round(a[1]/1e-5) * 1e-5}
-	finish := [2]float64{math.Round(b[0]/1e-5) * 1e-5, math.Round(b[1]/1e-5) * 1e-5}
+func (g *graph) findPath(start, finish [2]float64) ([][2]float64, bool) {
+	var keys [2][2]float64
+	for i, p := range [2][2]float64{start, finish} {
+		for ax, x := range p {
+			r := math.Round(x / 1e-5)
+			if x/1e-5-r == 0.5 {
+				r++
+			}
+			keys[i][ax] = r * 1e-5
+		}
+	}
+	start, finish = keys[0], keys[1]
 	if g.vertices[start] == nil || g.vertices[finish] == nil {
 		return nil, false
 	}

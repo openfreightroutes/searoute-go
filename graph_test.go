@@ -66,6 +66,19 @@ func TestFindPathRounding(t *testing.T) {
 	}
 }
 
+func TestFindPathRoundsNegativeHalfLikeJS(t *testing.T) {
+	g := buildGraph(&network.Network{Features: []network.Feature{
+		{Coords: [][2]float64{{-0.000025, 0}, {1, 0}}},
+	}}, testWeight)
+	if g.vertices[[2]float64{-0.00002, 0}] == nil {
+		t.Fatalf("expected key {-0.00002 0}, got vertices %v", g.vertices)
+	}
+	got, ok := g.findPath([2]float64{-0.000025, 0}, [2]float64{1, 0})
+	if want := [][2]float64{{-0.000025, 0}, {1, 0}}; !ok || !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v, %v want %v", got, ok, want)
+	}
+}
+
 func TestFindPathDoesNotMutate(t *testing.T) {
 	g := buildGraph(phantomNetwork, testWeight)
 	searches := [][2][2]float64{
@@ -73,21 +86,25 @@ func TestFindPathDoesNotMutate(t *testing.T) {
 		{{1, 0}, {4, 0}},
 		{{2, 0}, {1, 0}},
 	}
-	for _, s := range searches {
+	wants := make([][][2]float64, len(searches))
+	for i, s := range searches {
 		got, gotOK := g.findPath(s[0], s[1])
 		want, wantOK := buildGraph(phantomNetwork, testWeight).findPath(s[0], s[1])
 		if gotOK != wantOK || !reflect.DeepEqual(got, want) {
 			t.Fatalf("%v: got %v, %v want %v, %v", s, got, gotOK, want, wantOK)
 		}
+		wants[i] = want
 	}
 
 	var wg sync.WaitGroup
 	for range 8 {
-		for _, s := range searches {
+		for i, s := range searches {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				g.findPath(s[0], s[1])
+				if got, _ := g.findPath(s[0], s[1]); !reflect.DeepEqual(got, wants[i]) {
+					t.Errorf("concurrent %v: got %v want %v", s, got, wants[i])
+				}
 			}()
 		}
 	}
