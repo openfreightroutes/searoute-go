@@ -117,7 +117,6 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 		}
 		waypoints = append(waypoints, destination)
 
-		legOpts.Antimeridian = opts.Antimeridian
 		route, err := r.SeaRouteMulti(waypoints, legOpts)
 		if err != nil {
 			return nil, err
@@ -231,6 +230,9 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 			}
 		}
 	}
+	if err := route.applyEmissions(path, lenKm, opts); err != nil {
+		return nil, err
+	}
 	if opts.AppendOriginDestination {
 		route.Coordinates = slices.Concat([][2]float64{o}, path, [][2]float64{d})
 	}
@@ -310,7 +312,9 @@ func (r *Router) SeaRouteMulti(points []Point, opts Options) (*Route, error) {
 			}
 		}
 	}
-	// Task 8: emissions (ecaKm, ecaFraction, co2eTonnes) are computed here from route.Coordinates and totalKm.
+	if err := route.applyEmissions(route.Coordinates, totalKm, opts); err != nil {
+		return nil, err
+	}
 	route.applyAntimeridian(opts.Antimeridian)
 	return route, nil
 }

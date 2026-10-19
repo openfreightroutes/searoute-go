@@ -17,6 +17,7 @@ import (
 	"github.com/openfreightroutes/searoute-data/network"
 
 	searoute "github.com/openfreightroutes/searoute-go"
+	"github.com/openfreightroutes/searoute-go/eca"
 	"github.com/openfreightroutes/searoute-go/ports"
 )
 
@@ -24,8 +25,7 @@ var knownOptions = []string{"units", "restrictions", "via", "allowArctic", "vess
 
 func TestGolden(t *testing.T) {
 	pending := map[string]string{
-		"emissions": "emissions land in Task 8",
-		"networks":  "custom networks land in Task 9",
+		"networks": "custom networks land in Task 9",
 	}
 	networks := map[string]func() *network.Network{"marnet100": marnet100.Network, "marnet50": marnet50.Network, "marnet20": marnet20.Network}
 	routers := map[string]*searoute.Router{}
@@ -75,7 +75,9 @@ func TestGolden(t *testing.T) {
 						points = append(points, searoute.Point{Lon: ll[0].(float64), Lat: ll[1].(float64)})
 					}
 					if c.ECA {
-						t.Skip("ECA zones land in Task 8")
+						searoute.RegisterECAZones(eca.Zones)
+					} else {
+						searoute.RegisterECAZones(nil)
 					}
 					// encoding/json matches keys to field names case-insensitively, so searoute-ts option names decode straight into Options.
 					var opts searoute.Options
