@@ -94,6 +94,9 @@ func TestFindPathDoesNotMutate(t *testing.T) {
 			t.Fatalf("%v: got %v, %v want %v, %v", s, got, gotOK, want, wantOK)
 		}
 		wants[i] = want
+		if s == searches[2] && !reflect.DeepEqual(want, [][2]float64{{2, 0}, {1, 0}}) {
+			t.Fatalf("%v: got %v want [[2 0] [1 0]]", s, want)
+		}
 	}
 
 	var wg sync.WaitGroup

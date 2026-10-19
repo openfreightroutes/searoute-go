@@ -33,6 +33,19 @@ func (o *orderedEdges) clone() *orderedEdges {
 	return &orderedEdges{keys: slices.Clone(o.keys), weights: maps.Clone(o.weights)}
 }
 
+func roundKey(c [2]float64) [2]float64 {
+	var k [2]float64
+	for ax, x := range c {
+		// JavaScript Math.round rounds halves toward +Inf; math.Round rounds them away from zero.
+		r := math.Round(x / 1e-5)
+		if x/1e-5-r == 0.5 {
+			r++
+		}
+		k[ax] = r * 1e-5
+	}
+	return k
+}
+
 type graph struct {
 	vertices        map[[2]float64]*orderedEdges
 	sourceCoords    map[[2]float64][2]float64
@@ -50,15 +63,7 @@ func buildGraph(n *network.Network, weight func(a, b [2]float64, pass string) fl
 	keys := make([][][2]float64, len(n.Features))
 	for i, f := range n.Features {
 		for _, c := range f.Coords {
-			var k [2]float64
-			for ax, x := range c {
-				// JavaScript Math.round rounds halves toward +Inf; math.Round rounds them away from zero.
-				r := math.Round(x / 1e-5)
-				if x/1e-5-r == 0.5 {
-					r++
-				}
-				k[ax] = r * 1e-5
-			}
+			k := roundKey(c)
 			keys[i] = append(keys[i], k)
 			g.sourceCoords[k] = c
 		}
@@ -126,17 +131,7 @@ func buildGraph(n *network.Network, weight func(a, b [2]float64, pass string) fl
 }
 
 func (g *graph) findPath(start, finish [2]float64) ([][2]float64, bool) {
-	var keys [2][2]float64
-	for i, p := range [2][2]float64{start, finish} {
-		for ax, x := range p {
-			r := math.Round(x / 1e-5)
-			if x/1e-5-r == 0.5 {
-				r++
-			}
-			keys[i][ax] = r * 1e-5
-		}
-	}
-	start, finish = keys[0], keys[1]
+	start, finish = roundKey(start), roundKey(finish)
 	if g.vertices[start] == nil || g.vertices[finish] == nil {
 		return nil, false
 	}

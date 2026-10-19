@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -30,7 +31,7 @@ type Options struct {
 	SimilarityThreshold     float64
 }
 
-var CanalMaxDraftM = passages.Load().CanalMaxDraftM
+var CanalMaxDraftM = maps.Clone(passages.Load().CanalMaxDraftM)
 
 type Router struct {
 	network *network.Network
@@ -63,7 +64,7 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 	names := slices.Clone(opts.Restrictions)
 	if opts.VesselDraftMeters > 0 {
 		for _, canal := range []string{"panama", "suez", "kiel", "corinth"} {
-			if opts.VesselDraftMeters > CanalMaxDraftM[canal] {
+			if opts.VesselDraftMeters > table.CanalMaxDraftM[canal] {
 				names = append(names, canal)
 			}
 		}
@@ -157,7 +158,15 @@ func (r *Router) SeaRoute(origin, destination Point, opts Options) (*Route, erro
 		}
 		blocks = append(blocks, table.BBoxes[name]...)
 	}
-	key := strings.Join(names, ",")
+	canonicalNames := make([]string, len(names))
+	for i, name := range names {
+		canonicalNames[i] = name
+		if alias, ok := table.Aliases[name]; ok {
+			canonicalNames[i] = alias
+		}
+	}
+	slices.Sort(canonicalNames)
+	key := strings.Join(slices.Compact(canonicalNames), ",")
 	r.mu.Lock()
 	g := r.graphs[key]
 	if g == nil {
@@ -337,6 +346,20 @@ func (r *Router) SeaRouteAlternatives(origin, destination Point, k int, opts Opt
 	threshold := opts.SimilarityThreshold
 	if threshold == 0 {
 		threshold = 0.02
+	}
+	if unitToKm(opts.Units) == 0 && opts.Units != "" {
+		return nil, fmt.Errorf("%s units is invalid", opts.Units)
+	}
+	table := passages.Load()
+	for _, name := range slices.Concat(opts.Restrictions, opts.Via) {
+		if _, ok := table.BBoxes[name]; !ok {
+			return nil, fmt.Errorf("%w: %s", ErrUnknownPassage, name)
+		}
+	}
+	if opts.Emissions && opts.CO2eFactorKgPerKm <= 0 && opts.VesselClass != "" {
+		if _, ok := vesselClasses[opts.VesselClass]; !ok {
+			return nil, fmt.Errorf("unknown vessel class %q", opts.VesselClass)
+		}
 	}
 
 	type candidate struct {

@@ -7,10 +7,12 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
 	"github.com/openfreightroutes/searoute-data/marnet100"
+	"github.com/openfreightroutes/searoute-data/passages"
 )
 
 func TestShanghaiRotterdam(t *testing.T) {
@@ -166,5 +168,52 @@ func TestAlternativesK(t *testing.T) {
 		if routes[i].Length < routes[i-1].Length {
 			t.Fatalf("lengths not ascending at %d", i)
 		}
+	}
+}
+
+func TestAlternativesValidation(t *testing.T) {
+	origin, destination := Point{121.5, 31.0}, Point{4.4, 51.9}
+	_, err := SeaRouteAlternatives(origin, destination, 3, Options{Units: "furlongs"})
+	if err == nil || errors.Is(err, ErrNoRoute) || !strings.Contains(err.Error(), "furlongs units is invalid") {
+		t.Fatalf("units: err = %v", err)
+	}
+	_, err = SeaRouteAlternatives(origin, destination, 3, Options{Restrictions: []string{"atlantis"}})
+	if !errors.Is(err, ErrUnknownPassage) {
+		t.Fatalf("restrictions: err = %v", err)
+	}
+	_, err = SeaRouteAlternatives(origin, destination, 3, Options{Via: []string{"atlantis"}})
+	if !errors.Is(err, ErrUnknownPassage) {
+		t.Fatalf("via: err = %v", err)
+	}
+	_, err = SeaRouteAlternatives(origin, destination, 3, Options{Emissions: true, VesselClass: "dinghy"})
+	if err == nil || errors.Is(err, ErrNoRoute) || !strings.Contains(err.Error(), "unknown vessel class") {
+		t.Fatalf("vessel class: err = %v", err)
+	}
+}
+
+func TestCanalMaxDraftIsCopy(t *testing.T) {
+	CanalMaxDraftM["suez"] = 0
+	defer func() { CanalMaxDraftM["suez"] = passages.Load().CanalMaxDraftM["suez"] }()
+	r, err := SeaRoute(Point{121.5, 31.0}, Point{4.4, 51.9}, Options{VesselDraftMeters: 1, ReturnPassages: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(r.Passages, "suez") {
+		t.Fatalf("passages %v", r.Passages)
+	}
+}
+
+func TestAliasSharesGraph(t *testing.T) {
+	r, err := NewRouter(marnet100.Network())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"babelmandeb", "babalmandab"} {
+		if _, err := r.SeaRoute(Point{121.5, 31.0}, Point{4.4, 51.9}, Options{Restrictions: []string{name}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(r.graphs) != 1 {
+		t.Fatalf("graphs = %d, want 1", len(r.graphs))
 	}
 }

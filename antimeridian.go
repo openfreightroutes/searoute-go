@@ -3,9 +3,6 @@ package searoute
 import "math"
 
 func unwrapCoords(c [][2]float64) [][2]float64 {
-	if len(c) == 0 {
-		return nil
-	}
 	out := [][2]float64{c[0]}
 	offset := 0.0
 	for i := 1; i < len(c); i++ {
@@ -25,9 +22,6 @@ func unwrapCoords(c [][2]float64) [][2]float64 {
 }
 
 func splitAtAntimeridian(coords [][2]float64) [][][2]float64 {
-	if len(coords) == 0 {
-		return nil
-	}
 	u := unwrapCoords(coords)
 	panelOf := func(lon float64) float64 { return math.Floor((lon + 180) / 360) }
 
